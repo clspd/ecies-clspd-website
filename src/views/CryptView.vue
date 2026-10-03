@@ -36,7 +36,22 @@
                 </a-radio-group>
             </a-card>
 
-            <a-card :title="'5. Action & Output'" size="small">
+            <a-card :title="'5. Encryption algorithm'" size="small">
+                <div class="algo-row">
+                    <span class="algo-label">Curve</span>
+                    <a-radio-group v-model:value="page_state.curve">
+                        <a-radio v-for="c in CURVES" :key="c" :value="c">{{ CURVE_LABELS[c] }}</a-radio>
+                    </a-radio-group>
+                </div>
+                <div class="algo-row">
+                    <span class="algo-label">Cipher</span>
+                    <a-radio-group v-model:value="page_state.cipher">
+                        <a-radio v-for="c in CIPHERS" :key="c" :value="c">{{ CIPHER_LABELS[c] }}</a-radio>
+                    </a-radio-group>
+                </div>
+            </a-card>
+
+            <a-card :title="'6. Action & Output'" size="small">
                 <div class="action-row">
                     <a-button @click="performAction" type="primary">Perform Action</a-button>
                     <a-button @click="copyOutput">Copy Output</a-button>
@@ -56,9 +71,10 @@
             v-model:open="keyRequestOpen"
             :kind="keyRequestKind"
             :encoding="page_state.keyEncoding"
+            :curve="page_state.curve"
             @ok="onKeyRequestOk"
         />
-        <KeyLibraryDialog v-model:open="keyLibraryOpen" />
+        <KeyLibraryDialog v-model:open="keyLibraryOpen" :curve="page_state.curve" />
 
         <dialog-view v-model="showProgressDialog">
             <template #title>Processing...</template>
@@ -75,6 +91,7 @@ import { DialogView } from 'vue-dialog-view';
 import CreditsView from '@/components/CreditsView.vue';
 import KeyLibraryDialog from '@/components/KeyLibraryDialog.vue';
 import KeyRequestDialog, { type KeyRequestResult } from '@/components/KeyRequestDialog.vue';
+import { buildConfig, CIPHERS, CIPHER_LABELS, CURVES, CURVE_LABELS, DEFAULT_CIPHER, DEFAULT_CURVE, isCipher, isCurve, type Cipher, type Curve } from '@/utils/cryptoconfig';
 import { decodeBase64, decodeBytes, type KeyEncoding } from '@/utils/keyencoding';
 import { type KeyKind } from '@/utils/keys';
 
@@ -83,6 +100,8 @@ const props = withDefaults(defineProps<{
     keyContent?: string;
     keyEncoding?: KeyEncoding;
     input?: string;
+    curve?: string;
+    cipher?: string;
 }>(), {
     keyContent: "",
     input: "",
@@ -94,6 +113,8 @@ const page_state = reactive({
     keyEncoding: "hex" as KeyEncoding,
     input: "",
     output: "",
+    curve: DEFAULT_CURVE as Curve,
+    cipher: DEFAULT_CIPHER as Cipher,
 });
 
 const getKeyBytes = (keyContent: string, encoding: KeyEncoding = page_state.keyEncoding) => decodeBytes(keyContent, encoding);
@@ -102,10 +123,12 @@ const updateFromProps = () => {
     if (props.action) page_state.action = props.action;
     if (props.keyContent) try { getKeyBytes(props.keyContent, props.keyEncoding ?? page_state.keyEncoding); page_state.keyContent = props.keyContent; } catch {}
     if (props.keyEncoding) page_state.keyEncoding = props.keyEncoding;
+    if (isCurve(props.curve)) page_state.curve = props.curve;
+    if (isCipher(props.cipher)) page_state.cipher = props.cipher;
     // if (props.input) page_state.input = props.input; // default not enabled due to possible content security problems
 };
 
-watch(() => [props.action, props.keyContent, props.keyEncoding, props.input], () => {
+watch(() => [props.action, props.keyContent, props.keyEncoding, props.input, props.curve, props.cipher], () => {
     updateFromProps();
 }, { immediate: true });
 
@@ -142,6 +165,7 @@ const requestUserKey = (): Promise<KeyRequestResult | null> => {
 const onKeyRequestOk = (result: KeyRequestResult) => {
     page_state.keyContent = result.content;
     page_state.keyEncoding = result.encoding;
+    if (isCurve(result.curve)) page_state.curve = result.curve;
     resolveKeyRequest(result);
 };
 
@@ -173,12 +197,13 @@ const performAction = async () => {
 
     try {
         const keyBytes = getKeyBytes(page_state.keyContent);
+        const config = buildConfig(page_state.curve, page_state.cipher);
         if (page_state.action === "encrypt") {
-            const ciphered = encrypt(keyBytes, new TextEncoder().encode(page_state.input));
+            const ciphered = encrypt(keyBytes, new TextEncoder().encode(page_state.input), config);
             page_state.output = btoa(ciphered.reduce((text, byte) => text + String.fromCharCode(byte), ""));
         } else {
             const ciphered = decodeBase64(page_state.input);
-            page_state.output = new TextDecoder().decode(decrypt(keyBytes, ciphered));
+            page_state.output = new TextDecoder().decode(decrypt(keyBytes, ciphered, config));
         }
     } catch (err) {
         message.error("Error during action: " + err);
@@ -217,5 +242,16 @@ const performAction = async () => {
     flex-direction: row;
     flex-wrap: wrap;
     gap: 0.5em;
+}
+.algo-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+.algo-row:not(:last-child) {
+    margin-bottom: 0.5em;
+}
+.algo-label {
+    font-weight: 600;
 }
 </style>

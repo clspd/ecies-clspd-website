@@ -81,6 +81,7 @@
         <key-library-dialog
             v-model:open="libraryOpen"
             request-open
+            :curve="curve"
             @changed="loadAvailableKeys"
             @saved="loadAvailableKeys"
             @use="onLibraryUse"
@@ -114,12 +115,14 @@ import {
     type StoredKey,
 } from '@/utils/keystore';
 import { generateKeyPair, type KeyKind, type KeyPairHex } from '@/utils/keys';
+import { DEFAULT_CURVE, type Curve } from '@/utils/cryptoconfig';
 
 export interface KeyRequestResult {
     content: string;
     hex: string;
     encoding: KeyEncoding;
     kind: KeyKind;
+    curve: string;
     temporary: boolean;
     saved: boolean;
     name?: string;
@@ -130,9 +133,11 @@ const props = withDefaults(defineProps<{
     open: boolean;
     kind?: KeyKind;
     encoding?: KeyEncoding;
+    curve?: Curve;
 }>(), {
     kind: "public",
     encoding: "hex",
+    curve: DEFAULT_CURVE,
 });
 
 const emit = defineEmits<{
@@ -230,7 +235,7 @@ const loadAvailableKeys = async () => {
 };
 
 const ensureGenerated = () => {
-    if (!generated.value) generated.value = generateKeyPair();
+    if (!generated.value) generated.value = generateKeyPair(props.curve);
 };
 
 watch(
@@ -282,6 +287,7 @@ const onConfirm = async () => {
             hex: key.hex,
             encoding: encoding.value,
             kind: key.kind,
+            curve: key.curve,
             temporary: false,
             saved: true,
             name: key.name,
@@ -300,6 +306,7 @@ const onConfirm = async () => {
             hex: activeHex.value,
             encoding: encoding.value,
             kind: keyKind,
+            curve: props.curve,
             temporary: true,
             saved: false,
             source: "generated",
@@ -311,7 +318,7 @@ const onConfirm = async () => {
     confirming.value = true;
     try {
         const name = newKeyName.value || defaultGeneratedName.value;
-        const result = await saveGeneratedKeyPair(pair, name);
+        const result = await saveGeneratedKeyPair(pair, name, props.curve);
         if (result.publicKeyError) {
             message.warning("Only the private key could be saved: " + result.publicKeyError);
         } else {
@@ -324,6 +331,7 @@ const onConfirm = async () => {
             hex: activeHex.value,
             encoding: encoding.value,
             kind: keyKind,
+            curve: props.curve,
             temporary: false,
             saved: true,
             name,

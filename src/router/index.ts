@@ -11,6 +11,8 @@ const router = createRouter({
         keyContent: route.query["key.content"] || route.query.key,
         keyEncoding: route.query["key.encoding"] || route.query.key_encoding || route.query.keyEncoding,
         input: route.query.input,
+        curve: route.query.curve,
+        cipher: route.query.cipher,
       }),
     },
     {

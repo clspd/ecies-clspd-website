@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
+import { isCurve, type Curve } from "@/utils/cryptoconfig";
 import { normalizeHex, validateKey, DEFAULT_CURVE, type KeyKind } from "@/utils/keys";
 
 export const KEY_DB_NAME = "ecies-web";
@@ -11,7 +12,7 @@ export interface StoredKey {
     name: string;
     kind: KeyKind;
     curve: string;
-    /** Raw key bytes as lowercase hex (32 bytes private / 33 bytes compressed public). */
+    /** Raw key bytes as lowercase hex (32 bytes private; public is 33 bytes compressed on secp256k1, 32 bytes on x25519/ed25519). */
     hex: string;
     createdAt: number;
     updatedAt: number;
@@ -21,7 +22,7 @@ export interface StoredKeyInput {
     name?: string;
     kind: KeyKind;
     hex: string;
-    curve?: string;
+    curve?: Curve;
     /** Updates an existing record when present, creates a new one otherwise. */
     id?: string;
 }
@@ -139,15 +140,15 @@ export function getKey(id: string): Promise<StoredKey | undefined> {
 export function saveKey(input: StoredKeyInput): Promise<StoredKey> {
     return wrap(async () => {
         const hex = normalizeHex(input.hex);
-        const validation = validateKey(input.kind, hex);
-        if (!validation.ok) throw new KeyStoreError(validation.reason ?? "Invalid key");
-
         const db = await openKeyDB();
         const now = Date.now();
 
         if (input.id) {
             const existing = await db.get(KEY_STORE_NAME, input.id);
             if (!existing) throw new KeyStoreError("This key no longer exists in your key library");
+            const curve = input.curve ?? (isCurve(existing.curve) ? existing.curve : DEFAULT_CURVE);
+            const validation = validateKey(input.kind, hex, curve);
+            if (!validation.ok) throw new KeyStoreError(validation.reason ?? "Invalid key");
             const kind = input.kind === existing.kind ? existing.kind : input.kind;
             const isSameMaterial = kind === existing.kind && hex === existing.hex;
             if (!isSameMaterial) {
@@ -159,12 +160,16 @@ export function saveKey(input: StoredKeyInput): Promise<StoredKey> {
                 name: normalizeName(input.name, existing.name || defaultNameFor(kind)),
                 kind,
                 hex: isSameMaterial ? existing.hex : hex,
-                curve: input.curve ?? existing.curve ?? DEFAULT_CURVE,
+                curve,
                 updatedAt: now,
             };
             await db.put(KEY_STORE_NAME, updated);
             return updated;
         }
+
+        const curve = input.curve ?? DEFAULT_CURVE;
+        const validation = validateKey(input.kind, hex, curve);
+        if (!validation.ok) throw new KeyStoreError(validation.reason ?? "Invalid key");
 
         const conflict = await db.getFromIndex(KEY_STORE_NAME, "kindHex", [input.kind, hex]);
         if (conflict) throw new DuplicateKeyError(conflict);
@@ -174,7 +179,7 @@ export function saveKey(input: StoredKeyInput): Promise<StoredKey> {
             name: normalizeName(input.name, defaultNameFor(input.kind)),
             kind: input.kind,
             hex,
-            curve: input.curve ?? DEFAULT_CURVE,
+            curve,
             createdAt: now,
             updatedAt: now,
         };
@@ -190,14 +195,15 @@ export function saveKey(input: StoredKeyInput): Promise<StoredKey> {
 export function saveGeneratedKeyPair(
     pair: { privateHex: string; publicHex: string },
     name?: string,
+    curve: Curve = DEFAULT_CURVE,
 ): Promise<{ privateKey: StoredKey; publicKey?: StoredKey; publicKeyError?: string }> {
     return wrap(async () => {
-        const privateKey = await saveKey({ kind: "private", hex: pair.privateHex, name });
+        const privateKey = await saveKey({ kind: "private", hex: pair.privateHex, name, curve });
         const db = await openKeyDB();
         const existingPublic = await db.getFromIndex(KEY_STORE_NAME, "kindHex", ["public", pair.publicHex]);
         if (existingPublic) return { privateKey };
         try {
-            const publicKey = await saveKey({ kind: "public", hex: pair.publicHex, name });
+            const publicKey = await saveKey({ kind: "public", hex: pair.publicHex, name, curve });
             return { privateKey, publicKey };
         } catch (err) {
             return { privateKey, publicKeyError: String(err instanceof Error ? err.message : err) };

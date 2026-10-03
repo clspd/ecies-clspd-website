@@ -44,6 +44,7 @@
                 :initial-name="editor.name"
                 :initial-kind="editor.kind"
                 :initial-hex="editor.hex"
+                :curve="editor.curve"
                 :submitting="editorBusy"
                 @submit="onEditorSubmit"
                 @cancel="showEditor = false"
@@ -122,14 +123,17 @@ import {
     type StoredKey,
 } from '@/utils/keystore';
 import { derivePublicHex, generateKeyPair, type KeyKind } from '@/utils/keys';
+import { DEFAULT_CURVE, isCurve, type Curve } from '@/utils/cryptoconfig';
 
 const props = withDefaults(defineProps<{
     open?: boolean;
     /** True when the library is opened from the key request dialog. */
     requestOpen?: boolean;
+    curve?: Curve;
 }>(), {
     open: false,
     requestOpen: false,
+    curve: DEFAULT_CURVE,
 });
 
 const emit = defineEmits<{
@@ -165,6 +169,7 @@ const editor = reactive({
     name: "",
     kind: "private" as KeyKind,
     hex: "",
+    curve: DEFAULT_CURVE as Curve,
 });
 const showEditor = ref(false);
 const editorBusy = ref(false);
@@ -213,8 +218,8 @@ const confirmDelete = async () => {
 const generateKeys = async () => {
     generating.value = true;
     try {
-        const pair = generateKeyPair();
-        const result = await saveGeneratedKeyPair(pair);
+        const pair = generateKeyPair(props.curve);
+        const result = await saveGeneratedKeyPair(pair, undefined, props.curve);
         message.success(
             result.publicKey
                 ? `Generated a new key pair: "${result.privateKey.name}" and "${result.publicKey.name}"`
@@ -262,6 +267,7 @@ const startAdd = () => {
     editor.name = "";
     editor.kind = "private";
     editor.hex = "";
+    editor.curve = props.curve;
     editingId.value = "";
     editorSeed.value++;
     showEditor.value = true;
@@ -271,6 +277,7 @@ const startEdit = (key: StoredKey) => {
     editor.name = key.name;
     editor.kind = key.kind;
     editor.hex = key.hex;
+    editor.curve = isCurve(key.curve) ? key.curve : props.curve;
     editingId.value = key.id;
     editorSeed.value++;
     showEditor.value = true;
@@ -286,15 +293,15 @@ const onEditorSubmit = async (payload: { name: string; kind: KeyKind; hex: strin
     const name = payload.name || defaultNameFor(payload.kind);
     const id = editingId.value;
     try {
-        const saved = await saveKey({ id: id || undefined, name, kind: payload.kind, hex: payload.hex });
+        const saved = await saveKey({ id: id || undefined, name, kind: payload.kind, hex: payload.hex, curve: editor.curve });
         message.success(id ? `Updated "${saved.name}"` : `Saved "${saved.name}" to your key library`);
         emit('saved', saved);
         emit('changed');
 
         if (payload.derivePublic && payload.kind === "private") {
             try {
-                const publicHex = derivePublicHex(payload.hex);
-                await saveKey({ name: `${name} (public)`, kind: "public", hex: publicHex });
+                const publicHex = derivePublicHex(payload.hex, editor.curve);
+                await saveKey({ name: `${name} (public)`, kind: "public", hex: publicHex, curve: editor.curve });
                 message.success("The matching public key was added to your key library");
             } catch (err) {
                 message.warning("The private key was saved, but its public key was not: " + String(err));

@@ -9,3 +9,6 @@ keyencoding.ts
 keys.ts
 keystore.ts
 keyLibrary part of CryptView.vue
+
+
+我已经放弃了，这么简单个产品vibe得了管它写的啥玩意，就这样吧

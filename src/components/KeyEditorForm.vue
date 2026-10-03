@@ -71,6 +71,7 @@ import {
     type KeyEncoding,
 } from '@/utils/keyencoding';
 import { validateKey, type KeyKind } from '@/utils/keys';
+import { DEFAULT_CURVE, type Curve } from '@/utils/cryptoconfig';
 
 const props = withDefaults(defineProps<{
     initialName?: string;
@@ -79,6 +80,7 @@ const props = withDefaults(defineProps<{
     /** Prefills the key content field, e.g. when adding a key with a chosen encoding. */
     initialContent?: string;
     initialEncoding?: KeyEncoding;
+    curve?: Curve;
     submitting?: boolean;
 }>(), {
     initialName: "",
@@ -86,6 +88,7 @@ const props = withDefaults(defineProps<{
     initialHex: "",
     initialContent: "",
     initialEncoding: "hex",
+    curve: DEFAULT_CURVE,
     submitting: false,
 });
 
@@ -118,7 +121,7 @@ const validationError = computed(() => {
     if (!content) return "Key content is empty";
     const decoded = hex.value;
     if (!decoded) return `Invalid ${encodingLabels[inputEncoding.value]} content`;
-    const result = validateKey(kind.value, decoded);
+    const result = validateKey(kind.value, decoded, props.curve);
     return result.ok ? "" : (result.reason ?? "Invalid key");
 });
 
