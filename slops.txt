@@ -1,0 +1,11 @@
+The following is the unreviewed AI slop list. Be carefully before using them:
+
+ConfirmDialog.vue
+KeyDisplay.vue
+KeyEditorForm.vue
+KeyLibraryDialog.vue
+KeyRequestDialog.vue
+keyencoding.ts
+keys.ts
+keystore.ts
+keyLibrary part of CryptView.vue
