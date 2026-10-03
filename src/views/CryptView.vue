@@ -96,11 +96,11 @@ const page_state = reactive({
     output: "",
 });
 
-const getKeyBytes = (keyContent: string) => decodeBytes(keyContent, page_state.keyEncoding);
+const getKeyBytes = (keyContent: string, encoding: KeyEncoding = page_state.keyEncoding) => decodeBytes(keyContent, encoding);
 
 const updateFromProps = () => {
     if (props.action) page_state.action = props.action;
-    if (props.keyContent) try { getKeyBytes(props.keyContent); page_state.keyContent = props.keyContent; } catch (err) { message.error("Ignored invalid key from the URL: " + err); }
+    if (props.keyContent) try { getKeyBytes(props.keyContent, props.keyEncoding ?? page_state.keyEncoding); page_state.keyContent = props.keyContent; } catch {}
     if (props.keyEncoding) page_state.keyEncoding = props.keyEncoding;
     // if (props.input) page_state.input = props.input; // default not enabled due to possible content security problems
 };
